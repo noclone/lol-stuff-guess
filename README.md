@@ -66,7 +66,7 @@ Contrôles : `task check` (lint, typecheck, tests), `task format`.
 GitHub Pages, via `.github/workflows/deploy.yml` :
 
 - tous les jours à 4 h UTC : collecte de nouvelles games puis déploiement ;
-- à chaque push sur `main` : redéploiement du pool actuel sans collecte ;
+- à chaque push sur `master` : redéploiement du pool actuel sans collecte ;
 - manuellement (`workflow_dispatch`) avec un nombre de games au choix.
 
 Le pool précédent est relu depuis le site publié (`/data/pool.json.gz`) : les données ne sont jamais commitées.

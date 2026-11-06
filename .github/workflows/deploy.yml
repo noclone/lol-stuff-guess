@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: "0 4 * * *"
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
     inputs:
       games:
@@ -41,7 +41,12 @@ jobs:
           RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
           GAMES: ${{ github.event_name == 'push' && '0' || inputs.games || '1500' }}
           PREVIOUS: ${{ steps.pages.outputs.base_url }}/data/pool.json.gz
-        run: npm run collect -- --out web/public/data --previous "$PREVIOUS" --games "$GAMES"
+        run: |
+          if [ "$GAMES" = "0" ] && ! curl -sfI "$PREVIOUS" > /dev/null; then
+            echo "No published pool yet, collecting a first batch"
+            GAMES=1500
+          fi
+          npm run collect -- --out web/public/data --previous "$PREVIOUS" --games "$GAMES"
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
