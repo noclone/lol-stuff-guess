@@ -51,6 +51,7 @@ const participantSchema = z.object({
   summoner1Id: z.number(),
   summoner2Id: z.number(),
   perks: z.object({
+    statPerks: z.object({ offense: z.number(), flex: z.number(), defense: z.number() }),
     styles: z.array(
       z.object({
         style: z.number(),
@@ -87,6 +88,8 @@ const timelineEventSchema = z.object({
   participantId: z.number().optional(),
   itemId: z.number().optional(),
   beforeId: z.number().optional(),
+  skillSlot: z.number().optional(),
+  levelUpType: z.string().optional(),
 });
 export type TimelineEventDto = z.infer<typeof timelineEventSchema>;
 

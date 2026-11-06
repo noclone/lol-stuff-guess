@@ -2,20 +2,24 @@
 
 Devine le champion à partir de son stuff, tiré d'une vraie game classée (ranked solo/duo).
 
-- **Classique** : les 6 items sont visibles. À partir de la 3e erreur, chaque erreur débloque un indice (sorts d'invocateur → runes → rôle → stats de fin de game).
+Chaque jour, un daily de 10 champions, un par rang, de Fer à Challenger. Tout le monde joue la même grille pour une même date, qui change à minuit heure locale. La progression est sauvegardée dans le navigateur, et le résultat se partage en emojis.
+
+Le rang, le rôle, le KDA, les CS, la durée et l'issue de la game sont affichés d'emblée.
+
+- **Classique** : les 6 items sont visibles. Chaque erreur débloque un indice : classe et ressource du champion → page de runes → sorts d'invocateur → ordre de montée des sorts.
 - **Challenger** : les items arrivent un par un, dans l'ordre d'achat. Une fois tous révélés, les indices prennent le relais.
 
-Filtres disponibles : région, rang, durée de game. Interface en français et en anglais.
+Le mode se choisit au début du daily. Chaque rang laisse deux essais une fois tout révélé (6 en classique, jusqu'à 11 en challenger), puis la réponse est donnée et on passe au rang suivant. Interface en français et en anglais.
 
 ## Architecture
 
 Site 100 % statique, aucune clé Riot côté navigateur.
 
-| Dossier      | Rôle                                                                     |
-| ------------ | ------------------------------------------------------------------------ |
-| `shared/`    | Types et constantes partagés : format `Game`, index, découpage en shards |
-| `collector/` | Script Node qui interroge l'API Riot et produit les données statiques    |
-| `web/`       | Front Vue 3 + Vite                                                       |
+| Dossier      | Rôle                                                                  |
+| ------------ | --------------------------------------------------------------------- |
+| `shared/`    | Types et constantes partagés : format `Game`, format du daily         |
+| `collector/` | Script Node qui interroge l'API Riot et produit les données statiques |
+| `web/`       | Front Vue 3 + Vite                                                    |
 
 Le collector :
 
@@ -23,9 +27,12 @@ Le collector :
 2. récupère une de leurs ranked solo récentes, le détail et la timeline (`match-v5`) ;
 3. garde les 10 joueurs de chaque game (ordre d'achat des items reconstruit depuis la timeline) ;
 4. fusionne avec le pool existant, ne garde que les 3 derniers patchs ;
-5. écrit `pool.json.gz` (état complet), un shard JSON par région × rang × tranche de durée, et `index.json`.
+5. génère les dailies manquants, d'hier à après-demain (UTC), pour couvrir tous les fuseaux horaires : un joueur par rang, 10 champions différents, de préférence avec au moins 4 items et une game d'au moins 15 minutes, jamais une game déjà utilisée par un autre daily ;
+6. écrit `pool.json.gz` (games et dailies des 30 derniers jours) et un `daily/AAAA-MM-JJ.json` par daily.
 
-Le rang d'une game est celui du joueur tiré pour l'atteindre. Le front lit `index.json`, choisit un shard au hasard (pondéré par son nombre de manches) parmi ceux qui passent les filtres, et ne télécharge que celui-là.
+Un daily déjà généré n'est jamais modifié, même si le pool évolue.
+
+Le rang d'une game est celui du joueur tiré pour l'atteindre. Le front ne charge que le daily de la date locale.
 
 ## Développement
 
@@ -42,14 +49,15 @@ task dev                             # http://localhost:5273
 
 Options du collector (`task collect -- <options>`) :
 
-| Option           | Défaut         | Description                                             |
-| ---------------- | -------------- | ------------------------------------------------------- |
-| `--games`        | `1500`         | Nombre de nouvelles games visé, réparti région × rang   |
-| `--platforms`    | toutes         | Sous-ensemble de plateformes (`euw1,kr,...`)            |
-| `--tiers`        | tous           | Sous-ensemble de rangs (`GOLD,MASTER,...`)              |
-| `--keep-patches` | `3`            | Nombre de patchs conservés dans le pool                 |
-| `--max-age-days` | `14`           | Ancienneté max des games récupérées                     |
-| `--rate-limits`  | `20:1,100:120` | Limites de l'application Riot (`requêtes:secondes,...`) |
+| Option                | Défaut         | Description                                             |
+| --------------------- | -------------- | ------------------------------------------------------- |
+| `--games`             | `1500`         | Nombre de nouvelles games visé, réparti région × rang   |
+| `--platforms`         | toutes         | Sous-ensemble de plateformes (`euw1,kr,...`)            |
+| `--tiers`             | tous           | Sous-ensemble de rangs (`GOLD,MASTER,...`)              |
+| `--keep-patches`      | `3`            | Nombre de patchs conservés dans le pool                 |
+| `--keep-dailies-days` | `30`           | Nombre de jours de dailies conservés                    |
+| `--max-age-days`      | `14`           | Ancienneté max des games récupérées                     |
+| `--rate-limits`       | `20:1,100:120` | Limites de l'application Riot (`requêtes:secondes,...`) |
 
 Contrôles : `task check` (lint, typecheck, tests), `task format`.
 

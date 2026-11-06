@@ -4,6 +4,7 @@ import {
   type Player,
   POSITIONS,
   type Position,
+  type RunePage,
   type Tier,
 } from "@lsg/shared";
 import type { ItemOrigins } from "./ddragon";
@@ -90,20 +91,42 @@ function buildPlayer(
     participant.item4,
     participant.item5,
   ].filter((id) => id !== 0);
-  const [primary, secondary] = participant.perks.styles;
 
   return {
     championId: participant.championId,
     items: purchaseOrder(events, participant.participantId, finalItems, itemOrigins),
     spells: [participant.summoner1Id, participant.summoner2Id],
-    keystone: primary?.selections[0]?.perk ?? 0,
-    secondaryTree: secondary?.style ?? 0,
+    runes: runePage(participant.perks),
+    skills: skillOrder(events, participant.participantId),
     position: toPosition(participant.teamPosition),
     kills: participant.kills,
     deaths: participant.deaths,
     assists: participant.assists,
     cs: participant.totalMinionsKilled + participant.neutralMinionsKilled,
     win: participant.win,
+  };
+}
+
+export function skillOrder(events: TimelineEventDto[], participantId: number): number[] {
+  return events
+    .filter(
+      (e) =>
+        e.type === "SKILL_LEVEL_UP" &&
+        e.participantId === participantId &&
+        e.levelUpType === "NORMAL" &&
+        e.skillSlot !== undefined,
+    )
+    .map((e) => e.skillSlot as number);
+}
+
+function runePage(perks: ParticipantDto["perks"]): RunePage {
+  const [primary, secondary] = perks.styles;
+  return {
+    primaryTree: primary?.style ?? 0,
+    primary: primary?.selections.map((s) => s.perk) ?? [],
+    secondaryTree: secondary?.style ?? 0,
+    secondary: secondary?.selections.map((s) => s.perk) ?? [],
+    shards: { ...perks.statPerks },
   };
 }
 

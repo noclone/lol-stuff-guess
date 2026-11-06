@@ -49,27 +49,23 @@ export const TIERS = [
 ] as const;
 export type Tier = (typeof TIERS)[number];
 
-export const DURATION_BUCKETS = ["lt20", "20-25", "25-30", "30-35", "gte35"] as const;
-export type DurationBucket = (typeof DURATION_BUCKETS)[number];
-
-export function durationBucket(seconds: number): DurationBucket {
-  const minutes = seconds / 60;
-  if (minutes < 20) return "lt20";
-  if (minutes < 25) return "20-25";
-  if (minutes < 30) return "25-30";
-  if (minutes < 35) return "30-35";
-  return "gte35";
-}
-
 export const POSITIONS = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
 export type Position = (typeof POSITIONS)[number];
+
+export interface RunePage {
+  primaryTree: number;
+  primary: number[];
+  secondaryTree: number;
+  secondary: number[];
+  shards: { offense: number; flex: number; defense: number };
+}
 
 export interface Player {
   championId: number;
   items: number[];
   spells: [number, number];
-  keystone: number;
-  secondaryTree: number;
+  runes: RunePage;
+  skills: number[];
   position: Position | null;
   kills: number;
   deaths: number;
@@ -89,23 +85,15 @@ export interface Game {
   players: Player[];
 }
 
-export interface ShardRef {
-  platform: Platform;
-  tier: Tier;
-  duration: DurationBucket;
-  rounds: number;
-  path: string;
+export type DailyRound = Omit<Game, "players" | "playedAt"> & { player: Player };
+
+export interface Daily {
+  date: string;
+  rounds: DailyRound[];
 }
 
-export interface PoolIndex {
-  generatedAt: number;
-  patches: string[];
-  shards: ShardRef[];
-}
-
-export const INDEX_FILE = "index.json";
 export const POOL_FILE = "pool.json.gz";
 
-export function shardPath(platform: Platform, tier: Tier, duration: DurationBucket): string {
-  return `shards/${platform}/${tier}/${duration}.json`;
+export function dailyPath(date: string): string {
+  return `daily/${date}.json`;
 }

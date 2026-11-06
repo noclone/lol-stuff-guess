@@ -9,6 +9,8 @@ export interface Champion {
   key: number;
   id: string;
   name: string;
+  tags: string[];
+  resource: string;
 }
 
 export interface Icon {
@@ -16,16 +18,21 @@ export interface Icon {
   url: string;
 }
 
+export interface RuneTree extends Icon {
+  id: number;
+  slots: (Icon & { id: number })[][];
+}
+
 export interface StaticData {
   version: string;
   champions: Champion[];
   championsByKey: Map<number, Champion>;
   spells: Map<number, Icon>;
-  runes: Map<number, Icon>;
+  runeTrees: Map<number, RuneTree>;
 }
 
 interface ChampionJson {
-  data: Record<string, { id: string; key: string; name: string }>;
+  data: Record<string, { id: string; key: string; name: string; tags: string[]; partype: string }>;
 }
 
 interface SummonerJson {
@@ -70,7 +77,13 @@ export async function loadStaticData(locale: Locale): Promise<StaticData> {
   ]);
 
   const champions = Object.values(championJson.data)
-    .map((c) => ({ key: Number(c.key), id: c.id, name: c.name }))
+    .map((c) => ({
+      key: Number(c.key),
+      id: c.id,
+      name: c.name,
+      tags: c.tags,
+      resource: c.partype,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, locale));
 
   const spells = new Map(
@@ -80,20 +93,30 @@ export async function loadStaticData(locale: Locale): Promise<StaticData> {
     ]),
   );
 
-  const runes = new Map<number, Icon>();
-  for (const tree of runesJson) {
-    runes.set(tree.id, { name: tree.name, url: `${CDN}/cdn/img/${tree.icon}` });
-    for (const rune of tree.slots.flatMap((slot) => slot.runes)) {
-      runes.set(rune.id, { name: rune.name, url: `${CDN}/cdn/img/${rune.icon}` });
-    }
-  }
+  const runeTrees = new Map<number, RuneTree>(
+    runesJson.map((tree) => [
+      tree.id,
+      {
+        id: tree.id,
+        name: tree.name,
+        url: `${CDN}/cdn/img/${tree.icon}`,
+        slots: tree.slots.map((slot) =>
+          slot.runes.map((rune) => ({
+            id: rune.id,
+            name: rune.name,
+            url: `${CDN}/cdn/img/${rune.icon}`,
+          })),
+        ),
+      },
+    ]),
+  );
 
   return {
     version,
     champions,
     championsByKey: new Map(champions.map((c) => [c.key, c])),
     spells,
-    runes,
+    runeTrees,
   };
 }
 

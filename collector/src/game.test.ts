@@ -6,6 +6,7 @@ import {
   matchDdragonVersion,
   patchOf,
   purchaseOrder,
+  skillOrder,
 } from "./game";
 import type { MatchDto, ParticipantDto, TimelineDto, TimelineEventDto } from "./riot/api";
 
@@ -22,9 +23,13 @@ function participant(id: number, overrides: Partial<ParticipantDto> = {}): Parti
     summoner1Id: 4,
     summoner2Id: 14,
     perks: {
+      statPerks: { offense: 5005, flex: 5008, defense: 5011 },
       styles: [
-        { style: 8000, selections: [{ perk: 8008 }, { perk: 9111 }] },
-        { style: 8100, selections: [{ perk: 8139 }] },
+        {
+          style: 8000,
+          selections: [{ perk: 8008 }, { perk: 9111 }, { perk: 9104 }, { perk: 8014 }],
+        },
+        { style: 8100, selections: [{ perk: 8139 }, { perk: 8135 }] },
       ],
     },
     teamPosition: "BOTTOM",
@@ -159,6 +164,27 @@ describe("purchaseOrder", () => {
   });
 });
 
+describe("skillOrder", () => {
+  it("keeps a participant's normal skill level-ups in order", () => {
+    const levelUp = (participantId: number, skillSlot: number, levelUpType = "NORMAL") => ({
+      type: "SKILL_LEVEL_UP",
+      participantId,
+      skillSlot,
+      levelUpType,
+      timestamp: 0,
+    });
+    const events = [
+      levelUp(1, 1),
+      levelUp(2, 3),
+      levelUp(1, 3),
+      levelUp(1, 2, "EVOLVE"),
+      purchased(1, 3006, 10),
+      levelUp(1, 1),
+    ];
+    expect(skillOrder(events, 1)).toEqual([1, 3, 1]);
+  });
+});
+
 describe("buildGame", () => {
   it("builds a game with every player", () => {
     const game = buildGame(match(), timeline([]), "euw1", "GOLD", "16.22.1", NO_ORIGINS);
@@ -175,8 +201,14 @@ describe("buildGame", () => {
       championId: 101,
       items: [3006, 3031],
       spells: [4, 14],
-      keystone: 8008,
-      secondaryTree: 8100,
+      runes: {
+        primaryTree: 8000,
+        primary: [8008, 9111, 9104, 8014],
+        secondaryTree: 8100,
+        secondary: [8139, 8135],
+        shards: { offense: 5005, flex: 5008, defense: 5011 },
+      },
+      skills: [],
       position: "BOTTOM",
       kills: 5,
       deaths: 2,

@@ -1,8 +1,9 @@
 import { parseArgs } from "node:util";
 import { type Game, PLATFORMS, TIERS } from "@lsg/shared";
 import { type CollectContext, collectPlatform } from "./collect";
+import { ensureDailies } from "./daily";
 import { cachedItemOrigins, fetchDdragonVersions } from "./ddragon";
-import { keepRecentPatches, loadPreviousGames, mergeGames, writePool } from "./pool";
+import { keepRecentPatches, loadPreviousPool, mergeGames, writePool } from "./pool";
 import { RiotApi } from "./riot/api";
 import { RiotClient } from "./riot/client";
 import { parseRateWindows } from "./riot/rateLimiter";
@@ -16,6 +17,7 @@ const { values } = parseArgs({
     tiers: { type: "string", default: TIERS.join(",") },
     "keep-patches": { type: "string", default: "3" },
     "max-age-days": { type: "string", default: "14" },
+    "keep-dailies-days": { type: "string", default: "30" },
     "rate-limits": { type: "string", default: "20:1,100:120" },
   },
 });
@@ -27,9 +29,14 @@ async function main(): Promise<void> {
   const totalGames = parsePositiveInt(values.games, "--games", true);
   const keepPatches = parsePositiveInt(values["keep-patches"], "--keep-patches");
   const maxAgeDays = parsePositiveInt(values["max-age-days"], "--max-age-days");
+  const keepDailiesDays = parsePositiveInt(values["keep-dailies-days"], "--keep-dailies-days");
 
-  const previous = values.previous ? await loadPreviousGames(values.previous) : [];
-  log(`previous pool: ${previous.length} games`);
+  const previous = values.previous
+    ? await loadPreviousPool(values.previous)
+    : { games: [], dailies: {} };
+  log(
+    `previous pool: ${previous.games.length} games, ${Object.keys(previous.dailies).length} dailies`,
+  );
 
   let fresh: Game[] = [];
   if (totalGames > 0) {
@@ -40,7 +47,7 @@ async function main(): Promise<void> {
       api: new RiotApi(client),
       ddragonVersions: await fetchDdragonVersions(),
       itemOrigins: cachedItemOrigins(),
-      seenMatchIds: new Set(previous.map((game) => game.matchId)),
+      seenMatchIds: new Set(previous.games.map((game) => game.matchId)),
       since: new Date(Date.now() - maxAgeDays * 24 * 3600 * 1000),
       rng: Math.random,
       log,
@@ -53,10 +60,10 @@ async function main(): Promise<void> {
     log(`collected ${fresh.length} new games`);
   }
 
-  const games = keepRecentPatches(mergeGames(previous, fresh), keepPatches);
-  const index = await writePool(outDir, games, new Date());
-  const rounds = index.shards.reduce((sum, shard) => sum + shard.rounds, 0);
-  log(`pool: ${games.length} games, ${rounds} rounds, patches ${index.patches.join(", ")}`);
+  const games = keepRecentPatches(mergeGames(previous.games, fresh), keepPatches);
+  const dailies = ensureDailies(previous.dailies, games, new Date(), keepDailiesDays, Math.random);
+  await writePool(outDir, { games, dailies });
+  log(`pool: ${games.length} games, dailies ${Object.keys(dailies).sort().join(", ")}`);
 }
 
 function required(value: string | undefined, flag: string): string {

@@ -1,134 +1,159 @@
 <script setup lang="ts">
 import type { Player } from "@lsg/shared";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { StaticData } from "../data/ddragon";
 import type { Hint } from "../game/rules";
+import RunePage from "./RunePage.vue";
+import SkillOrder from "./SkillOrder.vue";
 
-defineProps<{
-  hints: { hint: Hint; missesLeft: number }[];
+const props = defineProps<{
+  hints: Hint[];
   player: Player;
-  durationSeconds: number;
   data: StaticData;
 }>();
 
-const { t } = useI18n();
+const champion = computed(() => props.data.championsByKey.get(props.player.championId));
 
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
-}
+const { t } = useI18n();
 </script>
 
 <template>
-  <ul class="hints">
-    <li
-      v-for="{ hint, missesLeft } in hints"
+  <TransitionGroup
+    name="hint"
+    tag="div"
+    class="hints"
+  >
+    <section
+      v-for="hint in hints"
       :key="hint"
-      :class="{ locked: missesLeft > 0 }"
+      class="lol-panel"
     >
-      <span class="label">{{ t(`hints.${hint}`) }}</span>
-      <span
-        v-if="missesLeft > 0"
-        class="value muted"
-      >{{ t("hints.locked", missesLeft) }}</span>
-      <span
-        v-else-if="hint === 'spells'"
-        class="value"
+      <h3 class="lol-panel-title">
+        {{ t(`hints.${hint}`) }}
+      </h3>
+      <div
+        v-if="hint === 'spells'"
+        class="spells"
       >
-        <img
+        <figure
           v-for="(spellId, index) in player.spells"
           :key="index"
-          :src="data.spells.get(spellId)?.url"
-          :alt="data.spells.get(spellId)?.name ?? ''"
-          :title="data.spells.get(spellId)?.name ?? ''"
         >
-      </span>
-      <span
+          <img
+            :src="data.spells.get(spellId)?.url"
+            :alt="data.spells.get(spellId)?.name ?? ''"
+          >
+          <figcaption>{{ data.spells.get(spellId)?.name ?? "?" }}</figcaption>
+        </figure>
+      </div>
+      <RunePage
         v-else-if="hint === 'runes'"
-        class="value"
-      >
-        <img
-          v-for="runeId in [player.keystone, player.secondaryTree]"
-          :key="runeId"
-          :src="data.runes.get(runeId)?.url"
-          :alt="data.runes.get(runeId)?.name ?? ''"
-          :title="data.runes.get(runeId)?.name ?? ''"
-        >
-      </span>
-      <span
-        v-else-if="hint === 'role'"
-        class="value"
-      >{{ t(`positions.${player.position ?? "unknown"}`) }}</span>
-      <span
+        :runes="player.runes"
+        :trees="data.runeTrees"
+      />
+      <SkillOrder
+        v-else-if="hint === 'skills'"
+        :skills="player.skills"
+      />
+      <div
         v-else
-        class="value stats"
+        class="class"
       >
-        <span>{{ t("stats.kda") }} {{ player.kills }}/{{ player.deaths }}/{{ player.assists }}</span>
-        <span>{{ t("stats.cs") }} {{ player.cs }}</span>
-        <span>{{ t("stats.duration") }} {{ formatDuration(durationSeconds) }}</span>
-        <span :class="player.win ? 'win' : 'loss'">{{ t(player.win ? "stats.win" : "stats.loss") }}</span>
-      </span>
-    </li>
-  </ul>
+        <div class="tags">
+          <span
+            v-for="tag in champion?.tags ?? []"
+            :key="tag"
+            class="tag"
+          >{{ t(`classes.${tag}`) }}</span>
+        </div>
+        <p class="resource">
+          {{ t("classes.resource") }}
+          <strong>{{ champion?.resource || t("classes.noResource") }}</strong>
+        </p>
+      </div>
+    </section>
+  </TransitionGroup>
 </template>
 
 <style scoped>
 .hints {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.75rem;
+}
+
+.spells {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  padding: 0.75rem;
+}
+
+figure {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
   margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
-li {
+figure img {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--gold);
+  box-shadow:
+    0 0 0 1px #010a13,
+    0 0 0 2px var(--gold-dark);
+}
+
+.class {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem;
+}
+
+.tags {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  min-height: 3rem;
-  padding: 0.5rem 0.9rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  gap: 0.6rem;
 }
 
-li.locked {
-  opacity: 0.6;
+.tag {
+  padding: 0.35rem 1rem;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f0e6d2;
+  background: #1e2328;
+  border: 1px solid var(--gold);
+  box-shadow: 0 0 0 1px #010a13;
 }
 
-.label {
+.resource {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #a09b8c;
+}
+
+.resource strong {
+  color: #f0e6d2;
+}
+
+figcaption {
+  font-size: 0.8rem;
   font-weight: 600;
+  color: #f0e6d2;
 }
 
-.value {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.hint-enter-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
-.value img {
-  width: 36px;
-  height: 36px;
-  border-radius: 4px;
-}
-
-.stats {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.9rem;
-}
-
-.muted {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.win {
-  color: var(--success);
-}
-
-.loss {
-  color: var(--danger);
+.hint-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { type Champion, championIconUrl } from "../data/ddragon";
+import { flashError } from "../game/feedback";
 import { searchChampions } from "../game/search";
 
 const props = defineProps<{
@@ -15,6 +16,8 @@ const emit = defineEmits<{ guess: [champion: Champion] }>();
 const query = ref("");
 const highlighted = ref(0);
 const input = ref<HTMLInputElement | null>(null);
+
+defineExpose({ flashError: () => flashError(input.value) });
 
 const suggestions = computed(() => searchChampions(props.champions, query.value, props.excludedKeys));
 

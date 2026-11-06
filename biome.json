@@ -6,6 +6,8 @@
       "!**/node_modules",
       "!**/dist",
       "!web/public/data",
+      "!web/public/ranks",
+      "!web/public/positions",
       "!**/*.vue",
       "!package-lock.json"
     ]

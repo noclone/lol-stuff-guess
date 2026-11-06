@@ -1,41 +1,82 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import type { Daily } from "@lsg/shared";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import FiltersPanel from "./components/FiltersPanel.vue";
+import DailySummary from "./components/DailySummary.vue";
 import GameRound from "./components/GameRound.vue";
+import RankRail from "./components/RankRail.vue";
+import { loadDaily, localDate } from "./data/daily";
 import { LOCALES, type Locale, loadStaticData, type StaticData } from "./data/ddragon";
-import { drawRound, type Round } from "./data/pool";
-import { MODES } from "./game/rules";
+import {
+  applyGuess,
+  type DailyProgress,
+  firstUnfinished,
+  giveUp,
+  loadProgress,
+  newProgress,
+  type RoundProgress,
+  saveProgress,
+} from "./game/progress";
+import { MODES, type Mode, maxAttempts } from "./game/rules";
 import { setLocale } from "./i18n";
-import { loadSettings, saveSettings } from "./settings";
-
-const RECENT_ROUNDS = 100;
+import { loadPreferredMode, savePreferredMode } from "./settings";
 
 const { t, locale } = useI18n();
 
-const settings = ref(loadSettings());
-const filtersOpen = ref(false);
 const data = ref<StaticData | null>(null);
-const round = ref<Round | null>(null);
-const state = ref<"loading" | "ready" | "empty" | "error">("loading");
-const recentKeys: string[] = [];
-let drawId = 0;
+const daily = ref<Daily | null>(null);
+const progress = ref<DailyProgress | null>(null);
+const viewIndex = ref(0);
+const state = ref<"loading" | "ready" | "unavailable" | "error">("loading");
 
-async function nextRound(): Promise<void> {
-  const id = ++drawId;
-  state.value = "loading";
-  try {
-    const drawn = await drawRound(settings.value.filters, new Set(recentKeys));
-    if (id !== drawId) return;
-    round.value = drawn;
-    if (drawn) {
-      recentKeys.push(drawn.key);
-      if (recentKeys.length > RECENT_ROUNDS) recentKeys.shift();
-    }
-    state.value = drawn ? "ready" : "empty";
-  } catch {
-    if (id === drawId) state.value = "error";
-  }
+const currentRound = computed(() => daily.value?.rounds[viewIndex.value] ?? null);
+const currentProgress = computed(() => progress.value?.rounds[viewIndex.value] ?? null);
+const showSummary = computed(
+  () => !!progress.value && !!daily.value && viewIndex.value >= daily.value.rounds.length,
+);
+const currentMaxAttempts = computed(() =>
+  progress.value && currentRound.value
+    ? maxAttempts(progress.value.mode, currentRound.value.player.items.length)
+    : 0,
+);
+
+function resumeIndex(value: DailyProgress): number {
+  const index = firstUnfinished(value);
+  return index === -1 ? value.rounds.length : index;
+}
+
+function updateCurrentRound(update: (round: RoundProgress) => RoundProgress): void {
+  const value = progress.value;
+  const round = value?.rounds[viewIndex.value];
+  if (!value || !round) return;
+  const rounds = [...value.rounds];
+  rounds[viewIndex.value] = update(round);
+  progress.value = { ...value, rounds };
+  saveProgress(progress.value);
+}
+
+const started = computed(
+  () =>
+    progress.value?.rounds.some((round) => round.status !== "playing" || round.misses.length > 0) ??
+    false,
+);
+
+function chooseMode(mode: Mode): void {
+  if (!progress.value || started.value) return;
+  savePreferredMode(mode);
+  progress.value = { ...progress.value, mode };
+}
+
+function guess(championKey: number): void {
+  const answerKey = currentRound.value?.player.championId;
+  if (answerKey === undefined) return;
+  updateCurrentRound((round) =>
+    applyGuess(round, championKey, answerKey, currentMaxAttempts.value),
+  );
+}
+
+function next(): void {
+  if (progress.value) viewIndex.value = resumeIndex(progress.value);
 }
 
 async function loadData(target: Locale): Promise<void> {
@@ -46,66 +87,62 @@ async function loadData(target: Locale): Promise<void> {
   }
 }
 
-watch(settings, saveSettings, { deep: true });
-watch(() => settings.value.filters, nextRound, { deep: true });
-watch(() => settings.value.mode, nextRound);
+async function loadToday(): Promise<void> {
+  try {
+    const loaded = await loadDaily(localDate());
+    if (!loaded) {
+      state.value = "unavailable";
+      return;
+    }
+    daily.value = loaded;
+    progress.value = loadProgress(loaded) ?? newProgress(loaded, loadPreferredMode());
+    viewIndex.value = progress.value ? resumeIndex(progress.value) : 0;
+    state.value = "ready";
+  } catch {
+    state.value = "error";
+  }
+}
+
 watch(locale, (value) => loadData(value as Locale));
 
 onMounted(() => {
   void loadData(locale.value as Locale);
-  void nextRound();
+  void loadToday();
 });
 </script>
 
 <template>
   <div class="app">
     <header>
-      <div>
-        <h1>{{ t("title") }}</h1>
-        <p class="subtitle">
-          {{ t("subtitle") }}
-        </p>
-      </div>
-      <div class="locales">
-        <button
-          v-for="code in LOCALES"
-          :key="code"
-          class="link"
-          :class="{ current: code === locale }"
-          @click="setLocale(code)"
+      <h1>{{ t("title") }}</h1>
+      <div class="controls">
+        <div
+          v-if="progress"
+          class="toggle"
+          :title="started ? t('modeLocked') : ''"
         >
-          {{ code.toUpperCase() }}
-        </button>
+          <button
+            v-for="mode in MODES"
+            :key="mode"
+            :class="{ active: progress.mode === mode }"
+            :disabled="started && progress.mode !== mode"
+            @click="chooseMode(mode)"
+          >
+            {{ t(`mode.${mode}`) }}
+          </button>
+        </div>
+        <div class="toggle">
+          <button
+            v-for="code in LOCALES"
+            :key="code"
+            :class="{ active: code === locale }"
+            @click="setLocale(code)"
+          >
+            {{ code.toUpperCase() }}
+          </button>
+        </div>
       </div>
     </header>
-
-    <nav class="toolbar">
-      <div class="modes">
-        <button
-          v-for="mode in MODES"
-          :key="mode"
-          :class="settings.mode === mode ? 'primary' : 'secondary'"
-          @click="settings.mode = mode"
-        >
-          {{ t(`mode.${mode}`) }}
-        </button>
-      </div>
-      <button
-        class="secondary"
-        :aria-expanded="filtersOpen"
-        @click="filtersOpen = !filtersOpen"
-      >
-        {{ t("filters.title") }}
-      </button>
-    </nav>
-    <p class="mode-help">
-      {{ t(`modeHelp.${settings.mode}`) }}
-    </p>
-
-    <FiltersPanel
-      v-if="filtersOpen"
-      v-model="settings.filters"
-    />
 
     <main>
       <p
@@ -115,26 +152,47 @@ onMounted(() => {
         {{ t("game.error") }}
       </p>
       <p
-        v-else-if="state === 'empty'"
+        v-else-if="state === 'unavailable'"
         class="status"
       >
-        {{ t("game.noRound") }}
+        {{ t("daily.unavailable") }}
       </p>
       <p
-        v-else-if="state === 'loading' || !data || !round"
+        v-else-if="state === 'loading' || !data || !daily || !progress"
         class="status"
       >
         {{ t("game.loading") }}
       </p>
-      <GameRound
+      <div
         v-else
-        :key="`${round.key}:${settings.mode}`"
-        :round="round"
-        :mode="settings.mode"
-        :data="data"
-        :locale="locale as Locale"
-        @next="nextRound"
-      />
+        class="daily"
+      >
+        <RankRail
+          :tiers="daily.rounds.map((round) => round.tier)"
+          :rounds="progress.rounds"
+          :current="showSummary ? -1 : viewIndex"
+        />
+        <DailySummary
+          v-if="showSummary"
+          :daily="daily"
+          :progress="progress"
+          :data="data"
+        />
+        <GameRound
+          v-else-if="currentRound && currentProgress"
+          :key="viewIndex"
+          :round="currentRound"
+          :progress="currentProgress"
+          :max-attempts="currentMaxAttempts"
+          :is-last="viewIndex === daily.rounds.length - 1"
+          :mode="progress.mode"
+          :data="data"
+          :locale="locale as Locale"
+          @guess="guess"
+          @give-up="updateCurrentRound(giveUp)"
+          @next="next"
+        />
+      </div>
     </main>
 
     <footer>
@@ -148,78 +206,86 @@ onMounted(() => {
 
 <style scoped>
 .app {
-  display: grid;
-  gap: 1rem;
-  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 1.5rem 1rem 2rem;
+  padding: 1rem;
 }
 
 header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 h1 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: 1.1rem;
   color: var(--accent);
 }
 
-.subtitle {
-  margin: 0.25rem 0 0;
-  color: var(--text-muted);
-}
-
-.locales {
+.controls {
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.75rem;
 }
 
-.locales .link {
-  padding: 0;
-  font-weight: 600;
+.toggle {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.toggle button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
   background: none;
   border: none;
-  cursor: pointer;
+  border-radius: 6px;
 }
 
-.locales .current {
-  color: var(--accent);
+.toggle button:hover:not(:disabled) {
+  color: var(--text);
 }
 
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
+.toggle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
-.modes {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.mode-help {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-muted);
+.toggle button.active {
+  color: var(--text);
+  background: var(--surface-raised);
 }
 
 main {
-  min-height: 420px;
+  flex: 1;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding: max(2rem, calc(50vh - 280px)) 0 3rem;
+}
+
+.daily {
+  display: grid;
+  justify-items: center;
+  gap: 1.5rem;
+  width: 100%;
 }
 
 .status {
-  text-align: center;
   color: var(--text-muted);
 }
 
 footer {
-  margin-top: 1rem;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
+  opacity: 0.7;
+  text-align: center;
 }
 </style>
