@@ -1,0 +1,34 @@
+{
+  "name": "lol-stuff-guess",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "collector",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "biome check . && eslint \"web/src/**/*.vue\"",
+    "format": "biome check --write . && eslint --fix \"web/src/**/*.vue\"",
+    "typecheck": "tsc -p shared && tsc -p collector && vue-tsc -p web --noEmit",
+    "test": "vitest run",
+    "collect": "tsx collector/src/main.ts",
+    "dev": "npm run dev -w web",
+    "build": "npm run build -w web"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "eslint-plugin-vue": "^10.12.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "4.1.12",
+    "vue-eslint-parser": "10.4.1",
+    "vue-tsc": "^3.3.14"
+  }
+}

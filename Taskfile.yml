@@ -1,0 +1,47 @@
+version: "3"
+
+dotenv:
+  - .env.secret
+
+tasks:
+  install:
+    desc: Install dependencies
+    cmds:
+      - npm ci
+
+  dev:
+    desc: Run the web dev server
+    cmds:
+      - npm run dev
+
+  collect:
+    desc: Collect games from the Riot API into web/public/data (extra args after --)
+    cmds:
+      - npm run collect -- --out web/public/data --previous web/public/data/pool.json.gz {{.CLI_ARGS}}
+
+  lint:
+    cmds:
+      - npm run lint
+
+  format:
+    cmds:
+      - npm run format
+
+  typecheck:
+    cmds:
+      - npm run typecheck
+
+  test:
+    cmds:
+      - npm test
+
+  build:
+    cmds:
+      - npm run build
+
+  check:
+    desc: Lint, typecheck and test
+    cmds:
+      - task: lint
+      - task: typecheck
+      - task: test

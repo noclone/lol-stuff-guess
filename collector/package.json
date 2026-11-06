@@ -1,0 +1,9 @@
+{
+  "name": "@lsg/collector",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lsg/shared": "*",
+    "zod": "^4.6.7"
+  }
+}

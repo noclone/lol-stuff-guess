@@ -1,0 +1,50 @@
+name: Collect and deploy
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      games:
+        description: New games to collect (0 = redeploy the current pool)
+        default: "1500"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - id: pages
+        uses: actions/configure-pages@v5
+      - name: Collect games
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          GAMES: ${{ github.event_name == 'push' && '0' || inputs.games || '1500' }}
+          PREVIOUS: ${{ steps.pages.outputs.base_url }}/data/pool.json.gz
+        run: npm run collect -- --out web/public/data --previous "$PREVIOUS" --games "$GAMES"
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
